@@ -1,0 +1,66 @@
+name: Publish
+on:
+  push:
+    tags:
+      - v*
+permissions:
+  contents: read
+jobs:
+  wheel:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            platform: linux
+            arch: x64
+          - os: ubuntu-22.04-arm
+            platform: linux
+            arch: arm64
+          - os: macos-15
+            platform: darwin
+            arch: x64
+          - os: macos-15
+            platform: darwin
+            arch: arm64
+          - os: windows-2022
+            platform: win32
+            arch: x64
+          - os: windows-11-arm
+            platform: win32
+            arch: arm64
+    runs-on: ${{ matrix.os }}
+    name: Wheel / ${{ matrix.platform }}-${{ matrix.arch }}
+    steps:
+      - uses: holepunchto/actions/python-base@v1
+      - uses: holepunchto/actions/install-pip-dependencies@v1
+        with:
+          packages: build==1.5.0
+      - uses: holepunchto/actions/setup-node@v1
+      - uses: holepunchto/actions/install-npm-dependencies@v1
+      - uses: holepunchto/actions/compile-prebuilds@v1
+        with:
+          platform: ${{ matrix.platform }}
+          arch: ${{ matrix.arch }}
+          prefix: src/bare_kit/prebuilds
+      - run: python -m build --wheel
+        env:
+          BARE_KIT_HOST: ${{ matrix.platform }}-${{ matrix.arch }}
+      - uses: holepunchto/actions/upload-wheels@v1
+        with:
+          platform: ${{ matrix.platform }}
+          arch: ${{ matrix.arch }}
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+    environment:
+      name: pypi
+    needs: wheel
+    name: Publish
+    steps:
+      - uses: holepunchto/actions/python-base@v1
+      - uses: holepunchto/actions/download-wheels@v1
+      - uses: holepunchto/actions/publish-pypi@v1
+        with:
+          build: sdist
