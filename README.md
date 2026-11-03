@@ -34,77 +34,13 @@ Bare.IPC.on('data', (data) => Bare.IPC.end(data))
 
 Closing a worklet terminates it, so keep it open for as long as it should run. Once closed, `terminate()` does nothing and `suspend()`, `resume()` and `wakeup()` raise `ValueError`.
 
-## Writing the worklet
+## Bare Kit
 
-### Using npm modules
+These bindings are a thin layer over [Bare Kit](https://github.com/holepunchto/bare-kit), whose README covers the [lifecycle](https://github.com/holepunchto/bare-kit#lifecycle), [IPC](https://github.com/holepunchto/bare-kit#ipc), [addons](https://github.com/holepunchto/bare-kit#addons) and [error handling](https://github.com/holepunchto/bare-kit#error-handling) of a worklet. In Python terms:
 
-The worklet doesn't have to be a bundle. Point `start()` at a plain JavaScript file next to a `package.json` and the worklet resolves `node_modules` from disk, including native addons such as those used by `hyperswarm` and `corestore`:
-
-```
-app.js
-package.json   # { "type": "module", "dependencies": { "hyperswarm": "..." } }
-main.py        # start(Path(__file__).parent / "app.js")
-```
-
-Run `npm install` next to `app.js`, then start it from Python as usual. Module types work as in Node.js: use `"type": "module"` or an `.mjs` file for `import` and top-level `await`. Code passed with `source=` and no such filename is CommonJS.
-
-### Handling errors
-
-An uncaught exception or unhandled promise rejection in the worklet aborts the whole process, Python included, without printing an error. This includes syntax errors in the module. Catch errors in the worklet and report them over `Bare.IPC` instead, so that Python can raise them:
-
-```js
-function fail(err) {
-  Bare.IPC.end(JSON.stringify({ error: err.message }) + '\n')
-}
-
-Bare.on('uncaughtException', fail)
-Bare.on('unhandledRejection', fail)
-```
-
-### Shutting down
-
-`worklet.end()` ends the data written to the worklet, which `Bare.IPC` sees as an `end` event. Handle it by releasing whatever keeps the worklet running, such as sockets, timers and swarms, and then ending `Bare.IPC` in turn, so that the worklet exits:
-
-```js
-Bare.IPC.on('data', (data) => {
-  // Handle messages from Python
-})
-
-Bare.IPC.on('end', async () => {
-  await swarm.destroy()
-  Bare.IPC.end()
-})
-```
-
-Set up these listeners before the first `await` of the module. A listener added after an `await` that takes long, such as waiting for peers, is only added once it settles, and Python ending the connection goes unseen until then. `end` is also only emitted once the stream is flowing, so listen for `data` too, or call `Bare.IPC.resume()`.
-
-Putting it together, a worklet using Hyperswarm looks like this:
-
-```js
-import Hyperswarm from 'hyperswarm'
-
-const swarm = new Hyperswarm()
-
-function fail(err) {
-  Bare.IPC.end(JSON.stringify({ error: err.message }) + '\n')
-}
-
-Bare.on('uncaughtException', fail)
-Bare.on('unhandledRejection', fail)
-
-Bare.IPC.on('data', (data) => {
-  // Handle messages from Python
-})
-
-Bare.IPC.on('end', async () => {
-  await swarm.destroy()
-  Bare.IPC.end()
-})
-
-// Only now do the slow work
-swarm.join(topic)
-await swarm.flush()
-```
+- If `source` is `None`, `start()` reads `filename` at runtime, so the worklet may be a module next to its `node_modules` rather than a bundle. Python loads Bare Kit as a shared library, so native addons, such as those of `hyperswarm` and `corestore`, work as is.
+- `worklet.end()` ends the host side of the IPC, which `Bare.IPC` reads as the end of the stream, and `close()` terminates the worklet.
+- An uncaught error in the worklet aborts the process, Python included, so report errors over `Bare.IPC` as described in [error handling](https://github.com/holepunchto/bare-kit#error-handling).
 
 ## License
 
