@@ -232,11 +232,11 @@ class Worklet:
         ``linger`` is how long in milliseconds the worklet may keep running
         before it goes idle, or -1 for as long as the platform allows.
         """
-        library().bare_worklet_suspend(self._handle, linger)
+        library().bare_worklet_suspend(self._open(), linger)
 
     def resume(self):
         """Resume a suspended worklet, emitting ``resume`` on ``Bare``."""
-        library().bare_worklet_resume(self._handle)
+        library().bare_worklet_resume(self._open())
 
     def wakeup(self, deadline=-1):
         """Wake up a suspended worklet, emitting ``wakeup`` on ``Bare``.
@@ -244,11 +244,13 @@ class Worklet:
         ``deadline`` is how long in milliseconds the worklet may run before it
         goes idle again, or -1 for as long as the platform allows.
         """
-        library().bare_worklet_wakeup(self._handle, deadline)
+        library().bare_worklet_wakeup(self._open(), deadline)
 
     def terminate(self):
-        """Ask the worklet to exit unless it has already exited."""
-        library().bare_worklet_terminate(self._handle)
+        """Ask the worklet to exit unless it has already exited or been
+        closed."""
+        if not self._closed:
+            library().bare_worklet_terminate(self._handle)
 
     async def wait(self):
         """Wait for the worklet to exit and return its exit code."""
@@ -256,7 +258,9 @@ class Worklet:
 
     async def close(self):
         """Close the connection, terminating the worklet if it is still
-        running, and wait for it to exit."""
+        running, and wait for it to exit. Once closed, ``terminate()`` does
+        nothing and ``suspend()``, ``resume()`` and ``wakeup()`` raise
+        ``ValueError``."""
         if self._closed:
             return
 
@@ -272,6 +276,13 @@ class Worklet:
 
     async def __aexit__(self, *exc):
         await self.close()
+
+    # The native worklet is freed once closed.
+    def _open(self):
+        if self._closed:
+            raise ValueError("The worklet is closed")
+
+        return self._handle
 
     def _call_soon(self, callback, *args):
         # The loop may have been closed while a worklet was left running.

@@ -1,6 +1,8 @@
 import asyncio
 from pathlib import Path
 
+import pytest
+
 from bare_kit import start
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -95,6 +97,18 @@ def test_drops_writes_once_closed():
         return await worklet.read()
 
     assert run(body()) == b""
+
+
+def test_ignores_terminate_once_closed_and_rejects_other_calls():
+    async def body():
+        worklet = await start(FIXTURES / "echo.js")
+        await worklet.close()
+        worklet.terminate()
+
+        with pytest.raises(ValueError):
+            worklet.suspend()
+
+    run(body())
 
 
 def test_streams_large_data():
