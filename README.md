@@ -32,7 +32,7 @@ Where `app.bundle` is a Bare bundle using `Bare.IPC`:
 Bare.IPC.on('data', (data) => Bare.IPC.end(data))
 ```
 
-Closing a worklet terminates it, so keep it open for as long as it should run.
+Closing a worklet terminates it, so keep it open for as long as it should run. Once closed, `terminate()` does nothing and `suspend()`, `resume()` and `wakeup()` raise `ValueError`.
 
 ## License
 
