@@ -27,7 +27,10 @@ def test_ends_ipc_data():
             await worklet.write(b"Hello ")
             await worklet.write(b"world")
             worklet.end()
-            await worklet.write(b"!")
+
+            with pytest.raises(BrokenPipeError):
+                await worklet.write(b"!")
+
             return b"".join([chunk async for chunk in worklet]), await worklet.wait()
 
     assert run(body()) == (b"Hello world", 0)
@@ -89,14 +92,26 @@ def test_suspends_and_resumes():
     assert run(body()) == [b"ready", b"suspend", b"resume"]
 
 
-def test_drops_writes_once_closed():
+def test_rejects_writes_once_closed():
     async def body():
         worklet = await start(FIXTURES / "echo.js")
         await worklet.close()
-        await worklet.write(b"Hello world")
-        return await worklet.read()
 
-    assert run(body()) == b""
+        with pytest.raises(BrokenPipeError):
+            await worklet.write(b"Hello world")
+
+    run(body())
+
+
+def test_rejects_writes_once_the_worklet_has_exited():
+    async def body():
+        async with await start(FIXTURES / "exit.js") as worklet:
+            await worklet.wait()
+
+            with pytest.raises(BrokenPipeError):
+                await worklet.write(b"Hello world")
+
+    run(body())
 
 
 def test_ignores_terminate_once_closed_and_rejects_other_calls():
