@@ -26,6 +26,10 @@ class BareKitError(Exception):
         self.status = status
 
 
+def _broken_pipe():
+    return BrokenPipeError("The connection to the worklet has ended or closed")
+
+
 def _check(status):
     if status != 0:
         raise BareKitError(status)
@@ -202,10 +206,14 @@ class Worklet:
     async def write(self, data):
         """Write ``data`` to the worklet and wait for it to drain.
 
-        Data written once the connection has ended or closed, such as while the
-        worklet exits, is dropped, as its exit already accounts for it.
+        Raises ``BrokenPipeError`` if the connection ends or closes before all
+        of the data is written, whether by ``end()``, ``close()``, reading to
+        the end of the data from the worklet, or the worklet closing its end.
         """
-        if self._ending or not data:
+        if self._ending:
+            raise _broken_pipe()
+
+        if not data:
             return
 
         written = self._loop.create_future()
@@ -338,7 +346,7 @@ class Worklet:
                 break
 
             if result == ERROR:
-                self._drop_writes()
+                self._fail_writes()
                 break
 
             write[1] = offset = offset + result
@@ -353,12 +361,12 @@ class Worklet:
             self._ended = True
             lib.bare_ipc_end(self._ipc)
 
-    def _drop_writes(self):
+    def _fail_writes(self):
         while self._writes:
             _, _, written = self._writes.popleft()
 
             if not written.done():
-                written.set_result(None)
+                written.set_exception(_broken_pipe())
 
     def _update(self):
         if self._closed or not self._started:
@@ -391,7 +399,7 @@ class Worklet:
 
         self._ending = self._ended = True
         self._eof = True
-        self._drop_writes()
+        self._fail_writes()
 
         if self._reader is not None and not self._reader.done():
             self._reader.set_result(None)
