@@ -5,7 +5,7 @@ find_package(cmake-fetch REQUIRED PATHS node_modules/cmake-fetch)
 
 project(bare_kit_python C)
 
-fetch_package("github:holepunchto/bare-kit@3.0.1")
+fetch_package("github:holepunchto/bare-kit@3.1.0")
 
 add_custom_target(bare_kit_python ALL DEPENDS bare::kit::shared)
 
