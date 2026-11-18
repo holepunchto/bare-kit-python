@@ -7,4 +7,5 @@ build/
 dist/
 .venv/
 node_modules
+package-lock.json
 src/bare_kit/prebuilds/
